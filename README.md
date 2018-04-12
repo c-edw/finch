@@ -10,6 +10,6 @@ Finch is a CLI tool which allows you to automatically enhance an image library u
 - Run `finch -h` for a list of parameters
 
 # What needs doing?
-- Cleanup  
-- ~~CLI implementation~~ (needs extending)
+- ~~Cleanup~~ (done)
+- ~~CLI implementation~~ (done, but needs extending)
 - Publish to `crates.io`
