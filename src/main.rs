@@ -8,7 +8,6 @@ extern crate walkdir;
 extern crate serde_json;
 
 use reqwest::Client;
-use base64::encode;
 use walkdir::WalkDir;
 use clap::{App, Arg};
 use serde_json::Value;
@@ -46,10 +45,16 @@ fn main() {
         let path = entry.path();
 
         // Only process if the Path is a file and the type supported by the API.
-        if entry.file_type().is_file() && is_supported(&path.extension().unwrap()) {
-            process_file(&path, key).unwrap();
+        if entry.file_type().is_file() && is_supported(path.extension().unwrap()) {
+            println!(
+                "Processing {}...",
+                &path.file_name().unwrap().to_str().unwrap()
+            );
+            process_file(path, key).unwrap();
         }
     }
+
+    println!("Done!");
 }
 
 /// Returns whether the file type is supported by the Vision API.
@@ -58,7 +63,7 @@ fn is_supported(ext: &OsStr) -> bool {
 }
 
 fn process_file(path: &Path, key: &str) -> Result<(), Box<Error>> {
-    let mut file = File::open(path).expect("Unable to find input file.");
+    let mut file = File::open(path).expect("Unable to open file.");
 
     // Read the image into the vector.
     let mut buf = Vec::new();
@@ -87,19 +92,16 @@ fn process_file(path: &Path, key: &str) -> Result<(), Box<Error>> {
 /// Return the highest resolution version of an image buffer by doing a reverse image search using the Vision API.
 fn get_highest_res(buf: &[u8], key: &str) -> Option<Vec<u8>> {
     // Assemble URL with API key.
-    let url = format!(
+    let endpoint = format!(
         "https://vision.googleapis.com/v1/images:annotate?key={}",
         key
     );
-
-    // Encode image buffer as base64.
-    let buf = encode(&buf);
 
     // Assemble request body.
     let json = json!({
        "requests": [{
             "image": { 
-                "content": &buf 
+                "content": base64::encode(&buf) 
             },
             "features": [
                 { "type": "WEB_DETECTION" }
@@ -109,18 +111,19 @@ fn get_highest_res(buf: &[u8], key: &str) -> Option<Vec<u8>> {
 
     // Assemble request and send it.
     let mut res = Client::new()
-        .post(url.as_str())
+        .post(endpoint.as_str())
         .body(json.to_string())
         .send()
         .unwrap();
 
-    // Deserialise the JSON into Responses.
+    // Deserialise the JSON into a Value.
     let values = res.json::<Value>().unwrap();
     let matching = &values["responses"][0]["webDetection"]["fullMatchingImages"];
 
-    // Get the URL of the first image returned.
-    if let Some(v) = matching[0]["url"].as_str() {
-        let mut new = reqwest::get(v).unwrap();
+    // Get the URL of the first image in the list.
+    // Returned images are sorted in descending order of resolution, so we can just take the first index.
+    if let Some(url) = matching[0]["url"].as_str() {
+        let mut new = reqwest::get(url).unwrap();
 
         let mut buf = Vec::new();
         new.copy_to(&mut buf).unwrap();
