@@ -5,11 +5,11 @@ Finch is a CLI tool which allows you to automatically enhance an image library u
 
 #### How can I use it?
 - Clone this repository
-- Run `cargo build --release`
-- Link or copy the binary to your `bin` directory (optional)
+- Run `cargo install`
 - Run `finch -h` for a list of parameters
 
 # What needs doing?
 - ~~Cleanup~~ (done)
-- ~~CLI implementation~~ (done, but needs extending)
+- ~~CLI implementation~~ (done)
+- Parallelise API calls (Vision API calls can take a long time and massively slows down the speed of Finch)
 - Publish to `crates.io`
