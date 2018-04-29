@@ -24,6 +24,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::env;
 use std::ffi::OsStr;
+use std::thread;
 
 // List of file types supported by the Vision API.
 const SUPPORTED: [&str; 6] = ["jpg", "jpeg", "png", "raw", "ico", "bmp"];
@@ -31,11 +32,11 @@ const SUPPORTED: [&str; 6] = ["jpg", "jpeg", "png", "raw", "ico", "bmp"];
 #[derive(StructOpt, Debug)]
 #[structopt(name = "args")]
 struct Opt {
-    /// Your Google Vision API key.   
+    /// Your Google Vision API key.
     #[structopt(short = "k", long = "key")]
     key: String,
 
-    /// Target directory containing images to enhance. 
+    /// Target directory containing images to enhance.
     #[structopt(name = "DIRECTORY", default_value = "./", parse(from_os_str))]
     dir: PathBuf,
 }
@@ -46,21 +47,31 @@ fn main() {
     let mut cur = env::current_dir().unwrap();
     cur.push(&opt.dir);
 
-    for entry in WalkDir::new(cur) {
-        let entry = entry.unwrap();
-        let path = entry.path();
+    let mut threads = Vec::new();
 
-        // Some files do not have extensions.
-        if let Some(extension) = path.extension() {
-            // Only process if the Path is a file and the type supported by the API.
-            if entry.file_type().is_file() && is_supported(extension) {
-                println!(
-                    "Processing {}...",
-                    &path.file_name().unwrap().to_str().unwrap()
-                );
-                process_file(path, &opt.key).ok();
-            }    
-        }
+    for entry in WalkDir::new(cur) {
+        threads.push(thread::spawn(move || {
+            let opt = Opt::from_args();
+
+            let entry = entry.unwrap();
+            let path = entry.path();
+
+            // Some files do not have extensions.
+            if let Some(extension) = path.extension() {
+                // Only process if the Path is a file and the type supported by the API.
+                if entry.file_type().is_file() && is_supported(extension) {
+                    println!(
+                        "Processing {}...",
+                        &path.file_name().unwrap().to_str().unwrap()
+                    );
+                    process_file(path, &opt.key).ok();
+                }
+            }
+        }));
+    }
+
+    for thread in threads {
+        thread.join().unwrap();
     }
 
     println!("Done!");
@@ -72,7 +83,7 @@ fn is_supported(ext: &OsStr) -> bool {
 }
 
 fn process_file(path: &Path, key: &str) -> Result<(), Box<Error>> {
-    let mut file = File::open(path).expect("Unable to open file.");
+    let mut file = File::open(path)?;
 
     // Read the image into the vector.
     let mut buf = Vec::new();
@@ -103,16 +114,16 @@ struct Images {
     url: String,
 }
 
-#[allow(non_snake_case)]
 #[derive(Deserialize)]
 struct Matching {
-    fullMatchingImages: Vec<Images>,
+    #[serde(rename = "fullMatchingImages")]
+    full_matching_images: Vec<Images>,
 }
 
-#[allow(non_snake_case)]
 #[derive(Deserialize)]
 struct Detections {
-    webDetection: Matching,
+    #[serde(rename = "webDetection")]
+    web_detection: Matching,
 }
 
 #[derive(Deserialize)]
@@ -151,7 +162,7 @@ fn get_highest_res(buf: &[u8], key: &str) -> Result<Vec<u8>, Box<Error>> {
 
     // Get the URL of the first image in the list.
     // Returned images are sorted in descending order of resolution, so we can just take the first index.
-    let mut new = reqwest::get(&values.responses[0].webDetection.fullMatchingImages[0].url)?;
+    let mut new = reqwest::get(&values.responses[0].web_detection.full_matching_images[0].url)?;
 
     let mut buf = Vec::new();
     new.copy_to(&mut buf).unwrap();
