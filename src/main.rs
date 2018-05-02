@@ -1,5 +1,7 @@
 extern crate base64;
 extern crate image;
+extern crate indicatif;
+extern crate rayon;
 extern crate reqwest;
 extern crate serde;
 extern crate walkdir;
@@ -13,30 +15,31 @@ extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 
-use structopt::StructOpt;
-use reqwest::Client;
-use walkdir::WalkDir;
 use image::GenericImage;
+use indicatif::{ProgressBar, ProgressStyle};
+use rayon::prelude::*;
+use reqwest::Client;
+use structopt::StructOpt;
+use walkdir::{DirEntry, WalkDir};
 
-use std::fs::{self, File};
+use std::env;
 use std::error::Error;
+use std::ffi::OsStr;
+use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::env;
-use std::ffi::OsStr;
-use std::thread;
 
 // List of file types supported by the Vision API.
 const SUPPORTED: [&str; 6] = ["jpg", "jpeg", "png", "raw", "ico", "bmp"];
 
 #[derive(StructOpt, Debug)]
-#[structopt(name = "args")]
+#[structopt(name = "finch")]
 struct Opt {
     /// Your Google Vision API key.
     #[structopt(short = "k", long = "key")]
     key: String,
 
-    /// Target directory containing images to enhance.
+    /// Target directory containing images to enhance. 
     #[structopt(name = "DIRECTORY", default_value = "./", parse(from_os_str))]
     dir: PathBuf,
 }
@@ -47,34 +50,38 @@ fn main() {
     let mut cur = env::current_dir().unwrap();
     cur.push(&opt.dir);
 
-    let mut threads = Vec::new();
+    // Walk the target directory and create a Vec<DirEntry>.
+    let dirs = WalkDir::new(&cur)
+        .into_iter()
+        .map(|dir| dir.unwrap())
+        .filter(|dir| dir.file_type().is_file())
+        .collect::<Vec<DirEntry>>();
 
-    for entry in WalkDir::new(cur) {
-        threads.push(thread::spawn(move || {
-            let opt = Opt::from_args();
+    let bar = ProgressBar::new(dirs.len() as u64);
 
-            let entry = entry.unwrap();
-            let path = entry.path();
+    bar.set_style(
+        ProgressStyle::default_bar()
+            .template("[{elapsed_precise}] {bar:40.cyan/blue} {msg}")
+            .progress_chars("|| "),
+    );
 
-            // Some files do not have extensions.
-            if let Some(extension) = path.extension() {
-                // Only process if the Path is a file and the type supported by the API.
-                if entry.file_type().is_file() && is_supported(extension) {
-                    println!(
-                        "Processing {}...",
-                        &path.file_name().unwrap().to_str().unwrap()
-                    );
-                    process_file(path, &opt.key).ok();
-                }
+    bar.enable_steady_tick(1000);
+
+    dirs.par_iter().for_each(|dir| {
+        let path = dir.path();
+
+        if let Some(extension) = path.extension() {
+            // Only process if the Path is a file and the type supported by the API.
+            if is_supported(extension) {
+                process_file(path, &opt.key).ok();
+                bar.set_message(path.strip_prefix(&cur).unwrap().to_str().unwrap());
             }
-        }));
-    }
+        }
 
-    for thread in threads {
-        thread.join().unwrap();
-    }
+        bar.inc(1);
+    });
 
-    println!("Done!");
+    bar.finish_with_message(format!("Completed processing {} images.", dirs.len()).as_str());
 }
 
 /// Returns whether the file type is supported by the Vision API.
@@ -92,7 +99,7 @@ fn process_file(path: &Path, key: &str) -> Result<(), Box<Error>> {
     // Grab the highest resolution version of this image.
     let output = get_highest_res(&buf, key)?;
 
-    // Delete original file.
+    // Delete original file, discard Error.
     fs::remove_file(path).ok();
 
     let image = image::load_from_memory(&output)?;
