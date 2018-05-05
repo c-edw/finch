@@ -39,7 +39,7 @@ struct Opt {
     #[structopt(short = "k", long = "key")]
     key: String,
 
-    /// Target directory containing images to enhance. 
+    /// Target directory containing images to enhance.
     #[structopt(name = "DIRECTORY", default_value = "./", parse(from_os_str))]
     dir: PathBuf,
 }
@@ -62,26 +62,29 @@ fn main() {
     bar.set_style(
         ProgressStyle::default_bar()
             .template("[{elapsed_precise}] {bar:40.cyan/blue} {msg}")
-            .progress_chars("|| "),
+            .progress_chars("||-"),
     );
+
+    bar.set_message("Processing...");
 
     bar.enable_steady_tick(1000);
 
+    // Iterate over the directories in parallel.
     dirs.par_iter().for_each(|dir| {
         let path = dir.path();
 
         if let Some(extension) = path.extension() {
             // Only process if the Path is a file and the type supported by the API.
             if is_supported(extension) {
-                process_file(path, &opt.key).ok();
-                bar.set_message(path.strip_prefix(&cur).unwrap().to_str().unwrap());
+                process_file(path, &opt.key).unwrap();
+
+                bar.inc(1);
+                bar.set_message(path.file_name().unwrap().to_str().unwrap());
             }
         }
-
-        bar.inc(1);
     });
 
-    bar.finish_with_message(format!("Completed processing {} images.", dirs.len()).as_str());
+    bar.finish_with_message(format!("Completed processing {} files.", dirs.len()).as_str());
 }
 
 /// Returns whether the file type is supported by the Vision API.
@@ -96,22 +99,26 @@ fn process_file(path: &Path, key: &str) -> Result<(), Box<Error>> {
     let mut buf = Vec::new();
     file.read_to_end(&mut buf)?;
 
+    let prev = image::load_from_memory(&buf)?;
+
     // Grab the highest resolution version of this image.
-    let output = get_highest_res(&buf, key)?;
+    if let Ok(output) = get_highest_res(&buf, key) {
+        let new = image::load_from_memory(&output)?;
 
-    // Delete original file, discard Error.
-    fs::remove_file(path).ok();
+        if new.width() > prev.width() && new.height() > prev.height() {
+            // Delete original file, discard Error.
+            fs::remove_file(path).ok();
 
-    let image = image::load_from_memory(&output)?;
-
-    // Write out new image as a PNG.
-    image::save_buffer(
-        path.with_extension("png"),
-        &image.raw_pixels(),
-        image.width(),
-        image.height(),
-        image.color(),
-    )?;
+            // Write out new image as a PNG.
+            image::save_buffer(
+                path.with_extension("png"),
+                &new.raw_pixels(),
+                new.width(),
+                new.height(),
+                new.color(),
+            )?;
+        }
+    }
 
     Ok(())
 }
