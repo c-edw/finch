@@ -1,6 +1,9 @@
+#![feature(extern_prelude)]
+
+mod hash;
+
 extern crate base64;
 extern crate image;
-extern crate indicatif;
 extern crate rayon;
 extern crate reqwest;
 extern crate serde;
@@ -16,7 +19,6 @@ extern crate serde_derive;
 extern crate serde_json;
 
 use image::GenericImage;
-use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use reqwest::Client;
 use structopt::StructOpt;
@@ -25,12 +27,12 @@ use walkdir::{DirEntry, WalkDir};
 use std::env;
 use std::error::Error;
 use std::ffi::OsStr;
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
 // List of file types supported by the Vision API.
-const SUPPORTED: [&str; 6] = ["jpg", "jpeg", "png", "raw", "ico", "bmp"];
+const SUPPORTED: [&str; 5] = ["jpg", "jpeg", "png", "ico", "bmp"];
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "finch")]
@@ -39,8 +41,12 @@ struct Opt {
     #[structopt(short = "k", long = "key")]
     key: String,
 
+    /// Similarity tolerance. You can probably leave this alone.
+    #[structopt(short = "t", long = "tolerance", default_value = "0.9")]
+    tolerance: f32,
+
     /// Target directory containing images to enhance.
-    #[structopt(name = "DIRECTORY", default_value = "./", parse(from_os_str))]
+    #[structopt(name = "DIRECTORY", default_value = ".", parse(from_os_str))]
     dir: PathBuf,
 }
 
@@ -57,18 +63,6 @@ fn main() {
         .filter(|dir| dir.file_type().is_file())
         .collect::<Vec<DirEntry>>();
 
-    let bar = ProgressBar::new(dirs.len() as u64);
-
-    bar.set_style(
-        ProgressStyle::default_bar()
-            .template("[{elapsed_precise}] {bar:40.cyan/blue} {msg}")
-            .progress_chars("||-"),
-    );
-
-    bar.set_message("Processing...");
-
-    bar.enable_steady_tick(1000);
-
     // Iterate over the directories in parallel.
     dirs.par_iter().for_each(|dir| {
         let path = dir.path();
@@ -77,14 +71,9 @@ fn main() {
             // Only process if the Path is a file and the type supported by the API.
             if is_supported(extension) {
                 process_file(path, &opt.key).unwrap();
-
-                bar.inc(1);
-                bar.set_message(path.file_name().unwrap().to_str().unwrap());
             }
         }
     });
-
-    bar.finish_with_message(format!("Completed processing {} files.", dirs.len()).as_str());
 }
 
 /// Returns whether the file type is supported by the Vision API.
@@ -95,43 +84,58 @@ fn is_supported(ext: &OsStr) -> bool {
 fn process_file(path: &Path, key: &str) -> Result<(), Box<Error>> {
     let mut file = File::open(path)?;
 
-    // Read the image into the vector.
+    // Read the image into a Vec.
     let mut buf = Vec::new();
     file.read_to_end(&mut buf)?;
 
     let prev = image::load_from_memory(&buf)?;
+    let prev_hash = hash::average_hash(&prev);
 
-    // Grab the highest resolution version of this image.
-    if let Ok(output) = get_highest_res(&buf, key) {
-        let new = image::load_from_memory(&output)?;
+    if let Ok(versions) = get_versions(buf, key) {
+        // Iterate over each version of an image, starting with the highest resolution/most similar.
+        for image in versions.iter() {
+            let mut req = reqwest::get(&image.url)?;
 
-        if new.width() > prev.width() && new.height() > prev.height() {
-            // Delete original file, discard Error.
-            fs::remove_file(path).ok();
+            let mut buf = Vec::new();
+            req.copy_to(&mut buf)?;
 
-            // Write out new image as a PNG.
-            image::save_buffer(
-                path.with_extension("png"),
-                &new.raw_pixels(),
-                new.width(),
-                new.height(),
-                new.color(),
-            )?;
+            // The fetched image may not be a supported format.
+            if let Ok(new) = image::load_from_memory(&buf) {
+                let new_hash = hash::average_hash(&new);
+
+                // Only bother saving the image if it's a greater resolution.
+                if new.dimensions() > prev.dimensions() {
+                    // The similarity will be lower if the webserver has served a dummy image, or it is watermarked.
+                    if prev_hash.similarity(&new_hash) > 0.9 {
+                        // Write out new image.
+                        image::save_buffer(
+                            path,
+                            &new.raw_pixels(),
+                            new.width(),
+                            new.height(),
+                            new.color(),
+                        ).unwrap();
+                    }
+                } else {
+                    // There are no more higher resolution versions left to iterate over.
+                    break;
+                }
+            }
         }
     }
 
     Ok(())
 }
 
-#[derive(Deserialize)]
-struct Images {
+#[derive(Deserialize, Clone)]
+struct Image {
     url: String,
 }
 
 #[derive(Deserialize)]
 struct Matching {
     #[serde(rename = "fullMatchingImages")]
-    full_matching_images: Vec<Images>,
+    full_matching_images: Vec<Image>,
 }
 
 #[derive(Deserialize)]
@@ -145,8 +149,8 @@ struct Responses {
     responses: Vec<Detections>,
 }
 
-/// Return the highest resolution version of an image buffer by doing a reverse image search using the Vision API.
-fn get_highest_res(buf: &[u8], key: &str) -> Result<Vec<u8>, Box<Error>> {
+/// Return all versions of an image found by doing a reverse image search using the Vision API.
+fn get_versions(buf: Vec<u8>, key: &str) -> Result<Vec<Image>, Box<Error>> {
     // Assemble URL with API key.
     let endpoint = format!(
         "https://vision.googleapis.com/v1/images:annotate?key={}",
@@ -171,15 +175,11 @@ fn get_highest_res(buf: &[u8], key: &str) -> Result<Vec<u8>, Box<Error>> {
         .body(json.to_string())
         .send()?;
 
-    // Deserialise the JSON into a Value.
+    // Deserialise the JSON into Responses.
     let values = res.json::<Responses>()?;
 
-    // Get the URL of the first image in the list.
-    // Returned images are sorted in descending order of resolution, so we can just take the first index.
-    let mut new = reqwest::get(&values.responses[0].web_detection.full_matching_images[0].url)?;
-
-    let mut buf = Vec::new();
-    new.copy_to(&mut buf).unwrap();
-
-    Ok(buf)
+    Ok(values.responses[0]
+        .web_detection
+        .full_matching_images
+        .clone())
 }
