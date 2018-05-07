@@ -70,7 +70,12 @@ fn main() {
         if let Some(extension) = path.extension() {
             // Only process if the Path is a file and the type supported by the API.
             if is_supported(extension) {
-                process_file(path, &opt.key).unwrap();
+                if let Err(_) = process_file(path, &opt.key) {
+                    println!(
+                        "Failed to process {}, continuing...",
+                        path.to_str().unwrap()
+                    );
+                }
             }
         }
     });
@@ -91,35 +96,35 @@ fn process_file(path: &Path, key: &str) -> Result<(), Box<Error>> {
     let prev = image::load_from_memory(&buf)?;
     let prev_hash = hash::average_hash(&prev);
 
-    if let Ok(versions) = get_versions(buf, key) {
-        // Iterate over each version of an image, starting with the highest resolution/most similar.
-        for image in versions.iter() {
-            let mut req = reqwest::get(&image.url)?;
+    let versions = get_versions(buf, key)?;
 
-            let mut buf = Vec::new();
-            req.copy_to(&mut buf)?;
+    // Iterate over each version of an image, starting with the highest resolution/most similar.
+    for image in versions.iter() {
+        let mut req = reqwest::get(&image.url)?;
 
-            // The fetched image may not be a supported format.
-            if let Ok(new) = image::load_from_memory(&buf) {
-                let new_hash = hash::average_hash(&new);
+        let mut buf = Vec::new();
+        req.copy_to(&mut buf)?;
 
-                // Only bother saving the image if it's a greater resolution.
-                if new.dimensions() > prev.dimensions() {
-                    // The similarity will be lower if the webserver has served a dummy image, or it is watermarked.
-                    if prev_hash.similarity(&new_hash) > 0.9 {
-                        // Write out new image.
-                        image::save_buffer(
-                            path,
-                            &new.raw_pixels(),
-                            new.width(),
-                            new.height(),
-                            new.color(),
-                        ).unwrap();
-                    }
-                } else {
-                    // There are no more higher resolution versions left to iterate over.
-                    break;
+        // The fetched image may not be a supported format.
+        if let Ok(new) = image::load_from_memory(&buf) {
+            let new_hash = hash::average_hash(&new);
+
+            // Only bother saving the image if it's a greater resolution.
+            if new.dimensions() > prev.dimensions() {
+                // The similarity will be lower if the webserver has served a dummy image, or it is watermarked.
+                if prev_hash.similarity(&new_hash) > 0.9 {
+                    // Write out new image.
+                    image::save_buffer(
+                        path,
+                        &new.raw_pixels(),
+                        new.width(),
+                        new.height(),
+                        new.color(),
+                    ).unwrap();
                 }
+            } else {
+                // There are no more higher resolution versions left to iterate over.
+                break;
             }
         }
     }
@@ -176,10 +181,11 @@ fn get_versions(buf: Vec<u8>, key: &str) -> Result<Vec<Image>, Box<Error>> {
         .send()?;
 
     // Deserialise the JSON into Responses.
-    let values = res.json::<Responses>()?;
+    let mut values = res.json::<Responses>()?;
 
-    Ok(values.responses[0]
+    Ok(values
+        .responses
+        .swap_remove(0)
         .web_detection
-        .full_matching_images
-        .clone())
+        .full_matching_images)
 }
