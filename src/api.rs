@@ -1,8 +1,11 @@
 use reqwest::Client;
+
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+
+const ENDPOINT: &str = "https://vision.googleapis.com/v1/images:annotate";
 
 #[derive(Deserialize)]
 pub struct Image {
@@ -33,10 +36,7 @@ pub fn get_matching_urls(path: &Path, api_key: &str) -> Result<Vec<Image>, Box<E
     File::open(path)?.read_to_end(&mut buf)?;
 
     // Assemble URL with API key.
-    let endpoint = format!(
-        "https://vision.googleapis.com/v1/images:annotate?key={}",
-        api_key
-    );
+    let endpoint = format!("{}?key={}", ENDPOINT, api_key);
 
     // Assemble request body.
     let json = json![{
@@ -54,7 +54,9 @@ pub fn get_matching_urls(path: &Path, api_key: &str) -> Result<Vec<Image>, Box<E
     let mut req = Client::new()
         .post(endpoint.as_str())
         .body(json.to_string())
-        .send()?;
+        .send()
+        // This should never fail unless the API is unreachable.
+        .expect("Failed to send API request.");
 
     // Deserialise the JSON into Responses.
     let mut values = req.json::<Responses>()?;
