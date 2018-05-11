@@ -32,13 +32,13 @@ pub struct Opt {
     #[structopt(short = "k", long = "api_key")]
     api_key: String,
 
-    /// Target directory containing images to enhance.
-    #[structopt(name = "DIRECTORY", default_value = ".", parse(from_os_str))]
-    dir: PathBuf,
-
     /// Similarity tolerance. You can probably leave this alone.
     #[structopt(short = "t", long = "tolerance", default_value = "0.9")]
     tolerance: f32,
+
+    /// Target directory containing images to enhance.
+    #[structopt(name = "DIRECTORY", default_value = ".", parse(from_os_str))]
+    dir: PathBuf,
 }
 
 fn main() {

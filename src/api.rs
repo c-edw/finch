@@ -1,8 +1,7 @@
 use reqwest::Client;
 
-use std::error::Error;
 use std::fs::File;
-use std::io::Read;
+use std::io::{self, Read};
 use std::path::Path;
 
 const ENDPOINT: &str = "https://vision.googleapis.com/v1/images:annotate";
@@ -29,8 +28,26 @@ pub struct Responses {
     pub responses: Vec<Detections>,
 }
 
+#[derive(Debug)]
+pub enum APIError {
+    IOError(io::Error),
+    RequestError(reqwest::Error),
+}
+
+impl From<io::Error> for APIError {
+    fn from(error: io::Error) -> Self {
+        APIError::IOError(error)
+    }
+}
+
+impl From<reqwest::Error> for APIError {
+    fn from(error: reqwest::Error) -> Self {
+        APIError::RequestError(error)
+    }
+}
+
 /// Return all images that fully match by doing a reverse image search using the Vision API. Sorted by resolution in descending order.
-pub fn get_matching_urls(path: &Path, api_key: &str) -> Result<Vec<Image>, Box<Error>> {
+pub fn get_matching_urls(path: &Path, api_key: &str) -> Result<Vec<Image>, APIError> {
     // Read the image into a Vec.
     let mut buf = Vec::new();
     File::open(path)?.read_to_end(&mut buf)?;
@@ -39,7 +56,7 @@ pub fn get_matching_urls(path: &Path, api_key: &str) -> Result<Vec<Image>, Box<E
     let endpoint = format!("{}?key={}", ENDPOINT, api_key);
 
     // Assemble request body.
-    let json = json![{
+    let json = json!({
        "requests": [{
             "image": { 
                 "content": base64::encode(&buf) 
@@ -48,7 +65,7 @@ pub fn get_matching_urls(path: &Path, api_key: &str) -> Result<Vec<Image>, Box<E
                 { "type": "WEB_DETECTION" }
             ]
         }]
-    }];
+    });
 
     // Assemble request and send it.
     let mut req = Client::new()

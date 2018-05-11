@@ -1,8 +1,8 @@
+use hash::Hash;
 use image::GenericImage;
 use walkdir::DirEntry;
 use Opt;
 
-use std::error::Error;
 use std::path::Path;
 
 // List of file types supported by both the Vision API, and the `image` crate.
@@ -23,14 +23,32 @@ pub fn is_supported(dir: &DirEntry) -> bool {
     SUPPORTED.contains(&ext.to_str().unwrap().to_lowercase().as_str())
 }
 
-pub fn process_file(path: &Path, opts: &Opt) -> Result<(), Box<Error>> {
+#[derive(Debug)]
+pub enum ProcessError {
+    ImageError(image::ImageError),
+    APIError(::api::APIError),
+}
+
+impl From<image::ImageError> for ProcessError {
+    fn from(error: image::ImageError) -> Self {
+        ProcessError::ImageError(error)
+    }
+}
+
+impl From<::api::APIError> for ProcessError {
+    fn from(error: ::api::APIError) -> Self {
+        ProcessError::APIError(error)
+    }
+}
+
+pub fn process_file(path: &Path, opts: &Opt) -> Result<(), ProcessError> {
     let prev = image::open(path)?;
-    let prev_hash = ::hash::average_hash(&prev);
+    let prev_hash = &prev.average_hash();
 
     let matching = ::api::get_matching_urls(path, &opts.api_key)?;
 
     // Iterate over each version of an image, starting with the highest resolution/most similar.
-    for image in matching.iter() {
+    for image in matching {
         // Get the image from the URL. This can fail if the webserver is down.
         let mut req = match reqwest::get(&image.url) {
             Ok(req) => req,
@@ -46,7 +64,7 @@ pub fn process_file(path: &Path, opts: &Opt) -> Result<(), Box<Error>> {
             Ok(buf) => buf,
             Err(_) => continue,
         };
-        let new_hash = ::hash::average_hash(&new);
+        let new_hash = &new.average_hash();
 
         // Only bother saving the image if it's a greater resolution.
         if new.dimensions() > prev.dimensions() {
