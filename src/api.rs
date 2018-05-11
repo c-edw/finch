@@ -1,8 +1,9 @@
-use reqwest::Client;
-
 use std::fs::File;
 use std::io::{self, Read};
 use std::path::Path;
+
+use hyper::client::FutureResponse;
+use hyper::Client;
 
 const ENDPOINT: &str = "https://vision.googleapis.com/v1/images:annotate";
 
@@ -47,7 +48,7 @@ impl From<reqwest::Error> for APIError {
 }
 
 /// Return all images that fully match by doing a reverse image search using the Vision API. Sorted by resolution in descending order.
-pub fn get_matching_urls(path: &Path, api_key: &str) -> Result<Vec<Image>, APIError> {
+pub fn get_matching_urls(path: &Path, api_key: &str, core: tokio_core::reactor::Core) -> Result<FutureResponse, APIError> {
     // Read the image into a Vec.
     let mut buf = Vec::new();
     File::open(path)?.read_to_end(&mut buf)?;
@@ -67,20 +68,16 @@ pub fn get_matching_urls(path: &Path, api_key: &str) -> Result<Vec<Image>, APIEr
         }]
     });
 
-    // Assemble request and send it.
-    let mut req = Client::new()
-        .post(endpoint.as_str())
-        .body(json.to_string())
-        .send()
-        // This should never fail unless the API is unreachable.
-        .expect("Failed to send API request.");
+    
+    let client = Client::new(&core.handle());
 
-    // Deserialise the JSON into Responses.
-    let mut values = req.json::<Responses>()?;
+    let mut req = hyper::Request::new(
+        hyper::Method::Get,
+        "http://www.theuselessweb.com/".parse().unwrap(),
+    );
+    req.set_body(json.to_string());
 
-    Ok(values
-        .responses
-        .swap_remove(0)
-        .web_detection
-        .full_matching_images)
+    let done = client.request(req);
+
+    Ok(done)
 }
