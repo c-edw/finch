@@ -14,11 +14,3 @@ To use Finch, you'll need a Vision API key, which you can get by registering for
 
 #### Supported platforms.
 Finch has only been tested on GNU/Linux (Ubuntu 17.10). If it doesn't work for you, please submit an issue describing the problem in as much detail as possible.
-
-# What needs doing?
-- ~~Cleanup~~ (done)
-- ~~CLI implementation~~ (done)
-- ~~Parallelise API calls (Vision API calls can take a long time and massively slows down the speed of Finch)~~ (done)
-- Prevent API calls for images that Finch has already processed
-- Option to reorganise images
-- Publish to `crates.io`
