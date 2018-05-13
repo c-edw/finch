@@ -64,7 +64,7 @@ pub fn process_file(path: &Path, opts: &Opt) -> Result<(), ProcessError> {
             Err(_) => continue,
         };
 
-        if new.dimensions() >= prev.dimensions() {
+        if new.dimensions() > prev.dimensions() {
             // Only calculate the hashes if we know it's a higher resolution.
             let prev_hash = prev.average_hash();
             let new_hash = new.average_hash();
