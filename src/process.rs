@@ -1,11 +1,8 @@
-use api::Responses;
-use futures::Stream;
 use hash::Hash;
-use image::GenericImage;
-use walkdir::DirEntry;
 use Opt;
 
-use futures::future::Future;
+use image::GenericImage;
+use walkdir::DirEntry;
 
 use std::path::Path;
 
@@ -47,62 +44,50 @@ impl From<::api::APIError> for ProcessError {
 
 pub fn process_file(path: &Path, opts: &Opt) -> Result<(), ProcessError> {
     let prev = image::open(path)?;
-    let prev_hash = prev.average_hash();
-    
-    let core = tokio_core::reactor::Core::new().unwrap();
-    let matching = ::api::get_matching_urls(path, &opts.api_key, core)?;
+    let images = ::api::get_matching_urls(path, &opts.api_key)?;
 
-    matching
-        .and_then(|n| n.body().concat2())
-        .map(|n| {
-            let res = serde_json::from_slice::<Responses>(&n);
+    // Iterate over each version of an image, starting with the highest resolution/most similar.
+    for image in images {
+        // Get the image from the URL. This can fail if the webserver is down.
+        let mut req = match reqwest::get(&image.url) {
+            Ok(req) => req,
+            Err(_) => continue,
+        };
 
-            let images = res.unwrap()
-                .responses
-                .swap_remove(0)
-                .web_detection
-                .full_matching_images;
+        let mut buf = Vec::new();
+        // Copy the request data into a buffer. This should not fail under normal circumstances.
+        req.copy_to(&mut buf).expect("Failed to copy image data.");
 
-            // Iterate over each version of an image, starting with the highest resolution/most similar.
-            for image in images {
-                // Get the image from the URL. This can fail if the webserver is down.
-                let mut req = match reqwest::get(&image.url) {
-                    Ok(req) => req,
-                    Err(_) => continue,
-                };
+        // Load the request body as an image. This can fail if the fetched image is not a supported format.
+        let new = match image::load_from_memory(&buf) {
+            Ok(buf) => buf,
+            Err(_) => continue,
+        };
 
-                let mut buf = Vec::new();
-                // Copy the request data into a buffer. This should not fail under normal circumstances.
-                req.copy_to(&mut buf).expect("Failed to copy image data.");
+        if new.dimensions() >= prev.dimensions() {
+            // Only calculate the hashes if we know it's a higher resolution.
+            let prev_hash = prev.average_hash();
+            let new_hash = new.average_hash();
 
-                // Load the request body as an image. This can fail if the fetched image is not a supported format.
-                let new = match image::load_from_memory(&buf) {
-                    Ok(buf) => buf,
-                    Err(_) => continue,
-                };
-                let new_hash = new.average_hash();
+            // The similarity will be lower if the webserver has served a dummy image, or it is watermarked.
+            if prev_hash.similarity(&new_hash) > opts.tolerance {
+                // Write out new image.
+                image::save_buffer(
+                    path,
+                    &new.raw_pixels(),
+                    new.width(),
+                    new.height(),
+                    new.color(),
+                ).expect("Unable to save image to target directory, exiting...");
 
-                // Only bother saving the image if it's a greater resolution.
-                if new.dimensions() > prev.dimensions() {
-                    // The similarity will be lower if the webserver has served a dummy image, or it is watermarked.
-                    if prev_hash.similarity(&new_hash) > opts.tolerance {
-                        // Write out new image.
-                        image::save_buffer(
-                            path,
-                            &new.raw_pixels(),
-                            new.width(),
-                            new.height(),
-                            new.color(),
-                        ).expect("Unable to save image to target directory, exiting...");
-                    }
-                } else {
-                    // There are no more higher resolution versions left to iterate over.
-                    break;
-                }
+                // A higher resolution image has been found, so we can break out.
+                break;
             }
-        })
-        .wait()
-        .unwrap();
+        } else {
+            // There are no more higher resolution versions left to iterate over.
+            break;
+        }
+    }
 
     Ok(())
 }

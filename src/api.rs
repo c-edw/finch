@@ -2,29 +2,28 @@ use std::fs::File;
 use std::io::{self, Read};
 use std::path::Path;
 
-use hyper::client::FutureResponse;
-use hyper::Client;
+use reqwest::Client;
 
 const ENDPOINT: &str = "https://vision.googleapis.com/v1/images:annotate";
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Image {
     pub url: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Matching {
     #[serde(rename = "fullMatchingImages")]
     pub full_matching_images: Vec<Image>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Detections {
     #[serde(rename = "webDetection")]
     pub web_detection: Matching,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Responses {
     pub responses: Vec<Detections>,
 }
@@ -48,7 +47,7 @@ impl From<reqwest::Error> for APIError {
 }
 
 /// Return all images that fully match by doing a reverse image search using the Vision API. Sorted by resolution in descending order.
-pub fn get_matching_urls(path: &Path, api_key: &str, core: tokio_core::reactor::Core) -> Result<FutureResponse, APIError> {
+pub fn get_matching_urls(path: &Path, api_key: &str) -> Result<Vec<Image>, APIError> {
     // Read the image into a Vec.
     let mut buf = Vec::new();
     File::open(path)?.read_to_end(&mut buf)?;
@@ -68,16 +67,18 @@ pub fn get_matching_urls(path: &Path, api_key: &str, core: tokio_core::reactor::
         }]
     });
 
-    
-    let client = Client::new(&core.handle());
+    // Assemble request and send it.
+    let mut res = Client::new()
+        .post(endpoint.as_str())
+        .body(json.to_string())
+        .send()?;
 
-    let mut req = hyper::Request::new(
-        hyper::Method::Get,
-        "http://www.theuselessweb.com/".parse().unwrap(),
-    );
-    req.set_body(json.to_string());
+    // Deserialise the JSON into Responses.
+    let mut values = res.json::<Responses>()?;
 
-    let done = client.request(req);
-
-    Ok(done)
+    Ok(values
+        .responses
+        .swap_remove(0)
+        .web_detection
+        .full_matching_images)
 }

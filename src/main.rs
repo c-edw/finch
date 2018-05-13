@@ -6,6 +6,7 @@ mod process;
 
 extern crate base64;
 extern crate image;
+extern crate rayon;
 extern crate reqwest;
 extern crate serde;
 extern crate walkdir;
@@ -19,12 +20,9 @@ extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 
-extern crate futures;
-extern crate hyper;
-extern crate tokio_core;
-
 use structopt::StructOpt;
 use walkdir::WalkDir;
+use rayon::prelude::*;
 
 use std::env;
 use std::path::PathBuf;
@@ -58,6 +56,9 @@ fn main() {
         .filter(process::is_supported)
         .filter(process::is_file)
         .map(|dir| dir.path().to_owned())
+        // For some reason we can't iterate in parallel over directories, so we do some filtering and then collect into a Vec.
+        .collect::<Vec<_>>()
+        .par_iter()
         .for_each(|path| {
             process::process_file(&path, &opts).unwrap_or_else(|_| {
                 println!("Failed to process {}, continuing...", path.display())

@@ -38,7 +38,7 @@ impl Hash for DynamicImage {
 
         let average =
             raw.iter().map(|&n| n as usize).sum::<usize>() / RESIZE_DIMENSION.pow(2) as usize;
-
+            
         let hash = raw.iter()
             .map(|&n| (n as usize > average) as u64)
             .enumerate()
