@@ -41,8 +41,7 @@ impl Hash for DynamicImage {
         assert_eq!(raw.len(), RESIZE_LENGTH as usize);
 
         // Calculate the average value.
-        let average =
-            raw.iter().map(|&n| n as usize).sum::<usize>() / RESIZE_LENGTH as usize;
+        let average = raw.iter().map(|&n| n as usize).sum::<usize>() / RESIZE_LENGTH as usize;
 
         // Calculate a 64-bit hash based on whether each value is greater than the average value.
         let hash = raw.iter()
@@ -63,10 +62,7 @@ impl Hash for DynamicImage {
         assert_eq!(raw.len(), RESIZE_LENGTH as usize);
 
         // Run the raw pixel buffer through the wavelet kernel.
-        let new = raw.iter()
-            .enumerate()
-            .map(marr_kernel)
-            .collect::<Vec<_>>();
+        let new = raw.iter().enumerate().map(marr_kernel).collect::<Vec<_>>();
 
         // Calculate the average value.
         let average = new.iter().sum::<f64>() / f64::from(RESIZE_LENGTH);
@@ -82,7 +78,7 @@ impl Hash for DynamicImage {
 }
 
 fn marr_kernel((i, n): (usize, &u8)) -> f64 {
-    let sigma_pow = RESIZE_LENGTH as f64;
+    let sigma_pow = f64::from(RESIZE_LENGTH);
 
     let (x, y) = (i % RESIZE_DIMENSION as usize, i / RESIZE_DIMENSION as usize);
     let (xpow, ypow) = (x.pow(2), y.pow(2));
