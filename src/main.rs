@@ -20,9 +20,9 @@ extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 
+use rayon::prelude::*;
 use structopt::StructOpt;
 use walkdir::WalkDir;
-use rayon::prelude::*;
 
 use std::env;
 use std::path::PathBuf;
