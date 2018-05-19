@@ -35,7 +35,7 @@ pub struct Opt {
     api_key: String,
 
     /// Similarity tolerance. You can probably leave this alone.
-    #[structopt(short = "t", long = "tolerance", default_value = "0.9")]
+    #[structopt(short = "t", long = "tolerance", default_value = "0.95")]
     tolerance: f32,
 
     /// Target directory containing images to enhance.

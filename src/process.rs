@@ -66,8 +66,8 @@ pub fn process_file(path: &Path, opts: &Opt) -> Result<(), ProcessError> {
 
         if new.dimensions() > prev.dimensions() {
             // Only calculate the hashes if we know it's a higher resolution.
-            let prev_hash = prev.average_hash();
-            let new_hash = new.average_hash();
+            let prev_hash = prev.marr_hash();
+            let new_hash = new.marr_hash();
 
             // The similarity will be lower if the webserver has served a dummy image, or it is watermarked.
             if prev_hash.similarity(&new_hash) > opts.tolerance {
