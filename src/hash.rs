@@ -26,12 +26,13 @@ impl ImageHash {
 }
 
 pub trait Hash {
+    #[deprecated]
     fn average_hash(&self) -> ImageHash;
     fn marr_hash(&self) -> ImageHash;
 }
 
 impl Hash for DynamicImage {
-    /// Calculate the perceptual hash of an image using the Average Hash algorithm.
+    /// Calculate the perceptual hash of an image using the Average hash algorithm.
     fn average_hash(&self) -> ImageHash {
         let resize = self.resize_exact(RESIZE_DIMENSION, RESIZE_DIMENSION, FilterType::Nearest)
             .grayscale();
@@ -52,7 +53,7 @@ impl Hash for DynamicImage {
         ImageHash::new(hash)
     }
 
-    /// Calculate the perceptual hash of an image using the Marr Wavelet Hash algorithm.
+    /// Calculate the perceptual hash of an image using the Marr wavelet hash algorithm.
     fn marr_hash(&self) -> ImageHash {
         let resize = self.resize_exact(RESIZE_DIMENSION, RESIZE_DIMENSION, FilterType::Nearest)
             .grayscale();
@@ -77,6 +78,7 @@ impl Hash for DynamicImage {
     }
 }
 
+/// The kernel for the Marr wavelet.
 fn marr_kernel((i, n): (usize, &u8)) -> f64 {
     let sigma_pow = f64::from(RESIZE_LENGTH);
 

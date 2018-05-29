@@ -58,10 +58,12 @@ fn main() {
         .map(|dir| dir.path().to_owned())
         // For some reason we can't iterate in parallel over directories, so we do some filtering and then collect into a Vec.
         .collect::<Vec<_>>()
+        // Iterate over the collection again, but in parallel.
         .par_iter()
         .for_each(|path| {
-            process::process_file(&path, &opts).unwrap_or_else(|_| {
-                println!("Failed to process {}, continuing...", path.display())
-            });
+            match process::process_file(&path, &opts) {
+                Ok(_) => println!("Sucessfully processed {}.", path.display()),
+                Err(_) => println!("Failed to process {}, continuing...", path.display())
+            }
         });
 }
