@@ -3,11 +3,15 @@ mod hash;
 mod process;
 
 extern crate base64;
+extern crate env_logger;
 extern crate image;
 extern crate rayon;
 extern crate reqwest;
 extern crate serde;
 extern crate walkdir;
+
+#[macro_use]
+extern crate log;
 
 #[macro_use]
 extern crate structopt;
@@ -44,8 +48,16 @@ pub struct Opt {
 fn main() {
     let opts = Opt::from_args();
 
-    // Get the current working directory. This can fail if the directory does not exist.
-    let mut cur = env::current_dir().expect("The current working directory is invalid.");
+    // Get the current working directory.
+    // FATAL: This can fail if the directory does not exist, or is invalid.
+    let mut cur = match env::current_dir() {
+        Ok(cur) => cur,
+        Err(_) => {
+            error!("Unable to access the current working directory.");
+            return;
+        }
+    };
+
     cur.push(&opts.dir);
 
     WalkDir::new(&cur)
@@ -60,8 +72,8 @@ fn main() {
         .par_iter()
         .for_each(|path| {
             match process::process_file(&path, &opts) {
-                Ok(_) => println!("Sucessfully processed {}.", path.display()),
-                Err(_) => println!("Failed to process {}, continuing...", path.display())
+                Ok(_) => info!("Sucessfully processed {}.", path.display()),
+                Err(_) => warn!("Failed to process {}.", path.display())
             }
         });
 }

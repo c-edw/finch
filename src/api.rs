@@ -14,8 +14,9 @@ pub struct Image {
 
 #[derive(Deserialize, Debug)]
 pub struct Matching {
+    #[serde(default)]
     #[serde(rename = "fullMatchingImages")]
-    pub full_matching_images: Vec<Image>,
+    pub full_matching_images: Option<Vec<Image>>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -48,7 +49,7 @@ impl From<reqwest::Error> for APIError {
 }
 
 /// Return all images that fully match by doing a reverse image search using the Vision API. Sorted by resolution in descending order.
-pub fn get_matching_urls(path: &Path, api_key: &str) -> Result<Vec<Image>, APIError> {
+pub fn matching_images(path: &Path, api_key: &str) -> Result<Option<Vec<Image>>, APIError> {
     // Read the image into a Vec.
     let mut buf = Vec::new();
     File::open(path)?.read_to_end(&mut buf)?;
