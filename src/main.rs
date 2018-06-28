@@ -1,5 +1,3 @@
-#![feature(extern_prelude)]
-
 mod api;
 mod hash;
 mod process;

@@ -1,7 +1,8 @@
 use hash::Hash;
 use Opt;
 
-use image::GenericImage;
+use image::{self, GenericImage};
+use reqwest;
 use walkdir::DirEntry;
 
 use std::path::Path;

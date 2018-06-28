@@ -2,7 +2,8 @@ use std::fs::File;
 use std::io::{self, Read};
 use std::path::Path;
 
-use reqwest::Client;
+use base64;
+use reqwest::{self, Client};
 
 const ENDPOINT: &str = "https://vision.googleapis.com/v1/images:annotate";
 
