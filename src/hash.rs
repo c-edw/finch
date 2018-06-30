@@ -119,6 +119,7 @@ mod tests {
     fn average_hash_is_correct() {
         let mut image = RgbaImage::new(32, 32);
 
+        // Generate a noisy image.
         image
             .enumerate_pixels_mut()
             .enumerate()
@@ -135,15 +136,13 @@ mod tests {
     fn marr_hash_is_correct() {
         let mut image = RgbaImage::new(32, 32);
 
+        // Generate a noisy image.
         image
             .enumerate_pixels_mut()
             .enumerate()
             .map(|(i, (_, _, pixel))| *pixel = Rgba([(i % 255) as u8, 255, 255, 255]))
             .for_each(drop);
 
-        assert_eq!(
-            ImageRgba8(image).hash(Algorithm::Marr).bits,
-            0xF0F3F1F3F3F
-        );
+        assert_eq!(ImageRgba8(image).hash(Algorithm::Marr).bits, 0xF0F3F1F3F3F);
     }
 }

@@ -1,9 +1,10 @@
 use std::fs::File;
-use std::io::{self, Read};
+use std::io::Read;
 use std::path::Path;
 
 use base64;
-use reqwest::{self, Client};
+use failure::Error;
+use reqwest::Client;
 
 const ENDPOINT: &str = "https://vision.googleapis.com/v1/images:annotate";
 
@@ -16,7 +17,7 @@ pub struct Image {
 pub struct Matching {
     #[serde(default)]
     #[serde(rename = "fullMatchingImages")]
-    pub full_matching_images: Option<Vec<Image>>,
+    pub full_matching_images: Vec<Image>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -25,39 +26,31 @@ pub struct Detections {
     pub web_detection: Matching,
 }
 
+#[derive(Deserialize, Debug, Fail)]
+#[fail(display = "Request error: {}", message)]
+pub struct RequestError {
+    message: String,
+}
+
 #[derive(Deserialize, Debug)]
 pub struct Responses {
-    pub responses: Vec<Detections>,
-}
-
-#[derive(Debug)]
-pub enum APIError {
-    IOError(io::Error),
-    RequestError(reqwest::Error),
-}
-
-impl From<io::Error> for APIError {
-    fn from(error: io::Error) -> Self {
-        APIError::IOError(error)
-    }
-}
-
-impl From<reqwest::Error> for APIError {
-    fn from(error: reqwest::Error) -> Self {
-        APIError::RequestError(error)
-    }
+    pub responses: Option<Vec<Detections>>,
+    pub error: Option<RequestError>,
 }
 
 /// Return all images that fully match by doing a reverse image search using the Vision API. Sorted by resolution in descending order.
-pub fn matching_images(path: &Path, api_key: &str) -> Result<Option<Vec<Image>>, APIError> {
+pub fn matching_images(path: &Path, api_key: &str) -> Result<Vec<Image>, Error> {
     // Read the image into a Vec.
     let mut buf = Vec::new();
+
+    // NOT FATAL: The other images may succesfully open and be readable.
     File::open(path)?.read_to_end(&mut buf)?;
 
     // Assemble URL with API key.
     let endpoint = format!("{}?key={}", ENDPOINT, api_key);
 
     // Assemble request body.
+    // TODO: Use `serde_json` to serialise a response.
     let json = json!({
        "requests": [{
             "image": { 
@@ -76,11 +69,15 @@ pub fn matching_images(path: &Path, api_key: &str) -> Result<Option<Vec<Image>>,
         .send()?;
 
     // Deserialise the JSON into Responses.
-    let mut values = res.json::<Responses>()?;
+    let values = res.json::<Responses>()
+        .expect("The API sent an unexpected response.");
 
-    Ok(values
-        .responses
-        .swap_remove(0)
-        .web_detection
-        .full_matching_images)
+    // TODO: Find a better solution.
+    if let Some(error) = values.error {
+        Err(error)?
+    } else if let Some(mut responses) = values.responses {
+        Ok(responses.swap_remove(0).web_detection.full_matching_images)
+    } else {
+        panic!("The API sent an unexpected response.")
+    }
 }
