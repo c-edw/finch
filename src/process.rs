@@ -14,7 +14,7 @@ use std::path::Path;
 const SUPPORTED: [&str; 7] = ["jpg", "jpeg", "png", "webp", "gif", "ico", "bmp"];
 
 // Maximum file size to upload (10MB) defined by the Vision API.
-const MAX_FILESIZE: u64 = 10485760;
+const MAX_FILESIZE: u64 = 10 * 1024 * 1024;
 
 /// Returns whether a path is a file.
 pub fn is_file(dir: &DirEntry) -> bool {
@@ -49,7 +49,7 @@ pub fn process_file(path: &Path, opts: &Opt) -> Result<(), Error> {
     for image in images {
         // Get the image from the URL.
         // NOT FATAL: This can fail if the webserver is down.
-        let mut req = match reqwest::get(&image.url) {
+        let mut req = match reqwest::get(&image) {
             Ok(req) => req,
             Err(_) => continue,
         };

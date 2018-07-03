@@ -52,7 +52,7 @@ pub struct Opt {
 
 fn main() {
     CombinedLogger::init(vec![
-        TermLogger::new(LevelFilter::Warn, Config::default()).unwrap(),
+        TermLogger::new(LevelFilter::Info, Config::default()).unwrap(),
     ]).unwrap();
 
     let opts = Opt::from_args();
@@ -77,7 +77,7 @@ fn main() {
         .for_each(|path| {
             // TODO: Better output.
             match process::process_file(&path, &opts) {
-                Ok(_) => info!("Sucessfully processed '{}'.", path.file_name().and_then(OsStr::to_str).unwrap()),
+                Ok(_) => info!("Processed {}.", path.file_name().and_then(OsStr::to_str).unwrap()),
                 Err(e) => error!("Failed to process {}", e),
             }
         });

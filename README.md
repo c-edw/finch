@@ -13,4 +13,9 @@ To use Finch, you'll need a Vision API key, which you can get by registering for
 - Run `finch -h` for a list of parameters
 
 #### Supported platforms.
-Finch has only been tested on GNU/Linux (Ubuntu 17.10). If it doesn't work for you, please submit an issue describing the problem in as much detail as possible.
+Finch has only been tested on GNU/Linux (Ubuntu 18.04). If it doesn't work for you, please submit an issue describing the problem in as much detail as possible.
+
+#### Notes.
+- Finch still has a fairly primitive user interface. It may not exit immediately if it encounters a problem, making unnecessary calls to the Vision API. 
+- Finch makes calls in parallel rather than asynchronously. This can cause performance issues.
+- It may work intermittently on slow connections.
