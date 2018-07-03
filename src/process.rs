@@ -23,14 +23,12 @@ pub fn is_file(dir: &DirEntry) -> bool {
 
 /// Returns whether the file type is supported by the Vision API.
 pub fn is_supported(dir: &DirEntry) -> bool {
-    // Get the path extension. This can fail if it does not have an extension.
-    let ext = match dir.path().extension() {
-        Some(ext) => ext,
-        None => return false,
-    };
-
-    // TODO: Remove this unwrap.
-    SUPPORTED.contains(&ext.to_str().unwrap().to_lowercase().as_str())
+    SUPPORTED.contains(&dir.path()
+        .extension()
+        .and_then(|n| n.to_str())
+        .map(|n| n.to_lowercase())
+        .unwrap_or_default()
+        .as_str())
 }
 
 /// Returns whether a file is within the filesize limit.
@@ -47,6 +45,8 @@ pub fn process_file(path: &Path, opts: &Opt) -> Result<(), Error> {
 
     // Iterate over each version of an image, starting with the highest resolution/most similar.
     for image in images {
+        debug!("Checking version {} for {}.", path.display(), image);
+
         // Get the image from the URL.
         // NOT FATAL: This can fail if the webserver is down.
         let mut req = match reqwest::get(&image) {
@@ -55,6 +55,7 @@ pub fn process_file(path: &Path, opts: &Opt) -> Result<(), Error> {
         };
 
         let mut buf = Vec::new();
+
         // Copy the request data into a buffer.
         // FATAL: The system may be out of memory or be in an unstable state.
         req.copy_to(&mut buf).expect("Failed to copy image data.");
@@ -67,12 +68,16 @@ pub fn process_file(path: &Path, opts: &Opt) -> Result<(), Error> {
         };
 
         if new.dimensions() > prev.dimensions() {
+            debug!("Comparing version {} for {}.", path.display(), image);
+
             // Only calculate the hashes if we know it's a higher resolution.
             let prev_hash = prev.hash(Algorithm::Marr);
             let new_hash = new.hash(Algorithm::Marr);
 
             // The similarity will be lower if the webserver has served a dummy image, or it is watermarked.
             if prev_hash.similarity(&new_hash) > opts.tolerance {
+                debug!("Saving version {} for {}.", path.display(), image);
+
                 // Write out the better image.
                 // NOT FATAL: This image could not be saved, but other images that are processing might be successfully saved.
                 image::save_buffer(

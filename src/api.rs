@@ -43,7 +43,7 @@ struct Detections {
 }
 
 #[derive(Deserialize, Debug, Fail)]
-#[fail(display = "Request error: {}", message)]
+#[fail(display = "{}", message)]
 struct RequestError {
     message: String,
 }
@@ -83,6 +83,8 @@ pub fn matching_images(path: &Path, key: &str) -> Result<Vec<String>, Error> {
         }],
     });
 
+    debug!("Querying {} with Vision API.", path.display());
+
     // Assemble request and send it.
     let mut res = Client::new()
         .post(endpoint.as_str())
@@ -97,12 +99,14 @@ pub fn matching_images(path: &Path, key: &str) -> Result<Vec<String>, Error> {
     if let Some(error) = values.error {
         Err(error)?
     } else if let Some(responses) = values.responses {
-        Ok(responses[0]
+        Ok(responses
+            .first()
+            .expect("The API returned results for zero queries.")
             .web_detection
             .full_matching_images
             .iter()
             .map(|n| n.url.to_owned())
-            .collect::<Vec<String>>())
+            .collect())
     } else {
         panic!("The API sent an unexpected response.")
     }

@@ -31,7 +31,6 @@ use structopt::StructOpt;
 use walkdir::WalkDir;
 
 use std::env;
-use std::ffi::OsStr;
 use std::path::PathBuf;
 
 #[derive(StructOpt, Debug)]
@@ -51,6 +50,7 @@ pub struct Opt {
 }
 
 fn main() {
+    // FATAL: The program can't run without the logger.
     CombinedLogger::init(vec![
         TermLogger::new(LevelFilter::Info, Config::default()).unwrap(),
     ]).unwrap();
@@ -75,10 +75,12 @@ fn main() {
         // Iterate over the collection again, but in parallel.
         .par_iter()
         .for_each(|path| {
+            debug!("Starting processing of {}.", path.display());
+
             // TODO: Better output.
             match process::process_file(&path, &opts) {
-                Ok(_) => info!("Processed {}.", path.file_name().and_then(OsStr::to_str).unwrap()),
-                Err(e) => error!("Failed to process {}", e),
+                Ok(_) => info!("Processed {}.", path.file_name().and_then(|n| n.to_str()).unwrap_or("file")),
+                Err(e) => error!("Failed to process. ({})", e),
             }
         });
 }
