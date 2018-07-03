@@ -13,6 +13,10 @@ use std::path::Path;
 // List of file types supported by both the Vision API, and the `image` crate.
 const SUPPORTED: [&str; 7] = ["jpg", "jpeg", "png", "webp", "gif", "ico", "bmp"];
 
+// Maximum file size to upload (10MB) defined by the Vision API.
+const MAX_FILESIZE: u64 = 10485760;
+
+/// Returns whether a path is a file.
 pub fn is_file(dir: &DirEntry) -> bool {
     dir.file_type().is_file()
 }
@@ -27,6 +31,11 @@ pub fn is_supported(dir: &DirEntry) -> bool {
 
     // TODO: Remove this unwrap.
     SUPPORTED.contains(&ext.to_str().unwrap().to_lowercase().as_str())
+}
+
+/// Returns whether a file is within the filesize limit.
+pub fn is_within_filesize_limit(dir: &DirEntry) -> bool {
+    dir.metadata().map(|n| n.len()).unwrap_or(0) <= MAX_FILESIZE
 }
 
 pub fn process_file(path: &Path, opts: &Opt) -> Result<(), Error> {

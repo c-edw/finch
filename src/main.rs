@@ -66,8 +66,9 @@ fn main() {
     WalkDir::new(&cur)
         .into_iter()
         .filter_map(|dir| dir.ok())
-        .filter(process::is_supported)
         .filter(process::is_file)
+        .filter(process::is_supported)
+        .filter(process::is_within_filesize_limit)
         .map(|dir| dir.path().to_owned())
         // For some reason we can't iterate in parallel over directories, so we do some filtering and then collect into a Vec.
         .collect::<Vec<_>>()
