@@ -56,12 +56,12 @@ struct Matching {
 }
 
 #[derive(Deserialize, Debug)]
-struct Image {
-    url: String,
+pub struct Image {
+    pub url: String,
 }
 
 /// Return all images that fully match by doing a reverse image search using the Vision API. Sorted by resolution in descending order.
-pub fn matching_images(path: &Path, key: &str) -> Result<Vec<String>, Error> {
+pub fn matching_images(client: &Client, path: &Path, key: &str) -> Result<Vec<Image>, Error> {
     // Read the image into a Vec.
     let mut buf = Vec::new();
 
@@ -86,28 +86,22 @@ pub fn matching_images(path: &Path, key: &str) -> Result<Vec<String>, Error> {
     debug!("Querying {} with Vision API.", path.display());
 
     // Assemble request and send it.
-    let mut res = Client::new()
+    let mut req = client
         .post(endpoint.as_str())
         .body(json.to_string())
         .send()?;
 
     // Deserialise the JSON into Responses.
-    let values = res.json::<Responses>()
+    let res = req.json::<Responses>()
         .expect("The API response could not be deserialised.");
 
-    // TODO: Find a better solution.
-    if let Some(error) = values.error {
-        Err(error)?
-    } else if let Some(responses) = values.responses {
-        Ok(responses
-            .first()
-            .expect("The API returned results for zero queries.")
+    if req.status().is_success() {
+        Ok(res.responses
+            .unwrap()
+            .remove(0)
             .web_detection
-            .full_matching_images
-            .iter()
-            .map(|n| n.url.to_owned())
-            .collect())
+            .full_matching_images)
     } else {
-        panic!("The API sent an unexpected response.")
+        Err(res.error.unwrap())?
     }
 }

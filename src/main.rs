@@ -26,6 +26,7 @@ extern crate serde_derive;
 extern crate serde_json;
 
 use rayon::prelude::*;
+use reqwest::Client;
 use simplelog::{CombinedLogger, Config, LevelFilter, TermLogger};
 use structopt::StructOpt;
 use walkdir::WalkDir;
@@ -40,7 +41,7 @@ pub struct Opt {
     #[structopt(short = "k", long = "key")]
     key: String,
 
-    /// Similarity tolerance. You can probably leave this alone.
+    /// Similarity tolerance.
     #[structopt(short = "t", long = "tolerance", default_value = "0.95")]
     tolerance: f32,
 
@@ -60,8 +61,9 @@ fn main() {
     // Get the current working directory.
     // FATAL: This can fail if the directory does not exist, or is invalid.
     let mut cur = env::current_dir().expect("Unable to access the current working directory.");
-
     cur.push(&opts.dir);
+
+    let client = Client::new();
 
     WalkDir::new(&cur)
         .into_iter()
@@ -78,7 +80,7 @@ fn main() {
             debug!("Starting processing of {}.", path.display());
 
             // TODO: Better output.
-            match process::process_file(&path, &opts) {
+            match process::process_file(&client, &path, &opts) {
                 Ok(_) => info!("Processed {}.", path.file_name().and_then(|n| n.to_str()).unwrap_or("file")),
                 Err(e) => error!("Failed to process. ({})", e),
             }
