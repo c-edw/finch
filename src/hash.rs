@@ -6,23 +6,19 @@ const RESIZE_DIMENSION: u32 = 8;
 const RESIZE_LENGTH: u32 = 64;
 
 #[derive(Debug)]
-pub struct ImageHash {
-    bits: u64,
+pub struct ResultHash {
+    digest: u64,
 }
 
-impl ImageHash {
-    fn new(bits: u64) -> Self {
-        ImageHash { bits }
+impl ResultHash {
+    /// Get the Hamming distance between another ResultHash
+    pub fn hamming_dist(&self, other: &ResultHash) -> u32 {
+        (self.digest ^ other.digest).count_ones()
     }
 
-    /// Get the Hamming distance between another ImageHash
-    pub fn hamming(&self, other: &ImageHash) -> u32 {
-        (self.bits ^ other.bits).count_ones()
-    }
-
-    /// Get the similarity to another ImageHash as a float between 0 and 1, where 0 represents no similarity and 1 represents no difference.
-    pub fn similarity(&self, other: &ImageHash) -> f32 {
-        1f32 - (self.hamming(other) as f32 / RESIZE_LENGTH as f32)
+    /// Get the similarity to another ResultHash as a float between 0 and 1, where 0 represents no similarity and 1 represents no difference.
+    pub fn similarity(&self, other: &ResultHash) -> f32 {
+        1f32 - (self.hamming_dist(other) as f32 / RESIZE_LENGTH as f32)
     }
 }
 
@@ -32,13 +28,14 @@ pub enum Algorithm {
     Marr,
 }
 
-pub trait Hash {
-    fn hash(&self, Algorithm) -> ImageHash;
+pub trait PerceptualHash {
+    fn hash(&self, Algorithm) -> ResultHash;
 }
 
-impl Hash for DynamicImage {
+impl PerceptualHash for DynamicImage {
+    // TODO: Remove this trait and have the function take raw image data.
     /// Calculate the perceptual hash of an image using the specified Algorithm.
-    fn hash(&self, algorithm: Algorithm) -> ImageHash {
+    fn hash(&self, algorithm: Algorithm) -> ResultHash {
         let resize = self.resize_exact(RESIZE_DIMENSION, RESIZE_DIMENSION, FilterType::Nearest)
             .grayscale();
 
@@ -57,13 +54,13 @@ impl Hash for DynamicImage {
         // Calculate the average value.
         let average = new.iter().sum::<f64>() / f64::from(RESIZE_LENGTH);
 
-        // Calculate a 64-bit hash based on whether each value is greater than the average value.
-        let hash = new.iter()
+        // Calculate a 64-bit digest based on whether each value is greater than the average value.
+        let digest = new.iter()
             .map(|&n| (n > average) as u64)
             .enumerate()
             .fold(0, |acc, (i, n)| acc | (n << i));
 
-        ImageHash::new(hash)
+        ResultHash { digest }
     }
 }
 
@@ -87,35 +84,34 @@ fn marr_kernel((i, n): (usize, &u8)) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use hash::{Algorithm, Hash, ImageHash};
+    use hash::{Algorithm, PerceptualHash, ResultHash};
     use image::{ImageRgba8, Rgba, RgbaImage};
 
     #[test]
     fn hamming_distance_is_correct() {
-        let a = ImageHash {
-            bits: 0xFFFFFFFFFFFFFFFF,
+        let a = ResultHash {
+            digest: 0xFFFFFFFFFFFFFFFF,
         };
-        let b = ImageHash {
-            bits: 0xFFFFFFFF00000000,
+        let b = ResultHash {
+            digest: 0xFFFFFFFF00000000,
         };
 
-        assert_eq!(a.hamming(&b), 32);
+        assert_eq!(a.hamming_dist(&b), 32);
     }
 
     #[test]
     fn similarity_is_correct() {
-        let a = ImageHash {
-            bits: 0xFFFFFFFFFFFFFFFF,
+        let a = ResultHash {
+            digest: 0xFFFFFFFFFFFFFFFF,
         };
-        let b = ImageHash {
-            bits: 0xFFFFFFFF00000000,
+        let b = ResultHash {
+            digest: 0xFFFFFFFF00000000,
         };
 
         assert_eq!(a.similarity(&b), 0.5);
     }
 
     #[test]
-    #[allow(deprecated)]
     fn average_hash_is_correct() {
         let mut image = RgbaImage::new(32, 32);
 
@@ -127,7 +123,7 @@ mod tests {
             .for_each(drop);
 
         assert_eq!(
-            ImageRgba8(image).hash(Algorithm::Average).bits,
+            ImageRgba8(image).hash(Algorithm::Average).digest,
             0xFF00FF00FF00FF00
         );
     }
@@ -143,6 +139,9 @@ mod tests {
             .map(|(i, (_, _, pixel))| *pixel = Rgba([(i % 255) as u8, 255, 255, 255]))
             .for_each(drop);
 
-        assert_eq!(ImageRgba8(image).hash(Algorithm::Marr).bits, 0xF0F3F1F3F3F);
+        assert_eq!(
+            ImageRgba8(image).hash(Algorithm::Marr).digest,
+            0xF0F3F1F3F3F
+        );
     }
 }

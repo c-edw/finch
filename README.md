@@ -19,3 +19,6 @@ Finch has only been tested on GNU/Linux (Ubuntu 18.04). If it doesn't work for y
 - Finch still has a fairly primitive user interface. It may not exit immediately if it encounters a problem, making unnecessary calls to the Vision API. 
 - Finch makes calls in parallel rather than asynchronously. This can cause performance issues.
 - It may work intermittently on slow connections.
+
+#### Why does this (fairly) simple project have so many commits?
+I am constantly rewriting Finch as I learn better practices, sometimes adding new features along the way.

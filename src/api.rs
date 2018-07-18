@@ -1,7 +1,3 @@
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
-
 use base64;
 use failure::Error;
 use reqwest::Client;
@@ -16,7 +12,7 @@ struct Annotate<'a> {
 #[derive(Serialize, Debug)]
 struct Request<'a> {
     image: Content,
-    features: Vec<Type<'a>>,
+    features: Vec<FeatureType<'a>>,
 }
 
 #[derive(Serialize, Debug)]
@@ -25,9 +21,12 @@ struct Content {
 }
 
 #[derive(Serialize, Debug)]
-struct Type<'a> {
+struct FeatureType<'a> {
     #[serde(rename = "type")]
     feature_type: &'a str,
+
+    #[serde(rename = "maxResults")]
+    max_results: u32,
 }
 
 #[derive(Deserialize, Debug)]
@@ -61,13 +60,7 @@ pub struct Image {
 }
 
 /// Return all images that fully match by doing a reverse image search using the Vision API. Sorted by resolution in descending order.
-pub fn matching_images(client: &Client, path: &Path, key: &str) -> Result<Vec<Image>, Error> {
-    // Read the image into a Vec.
-    let mut buf = Vec::new();
-
-    // NOT FATAL: The other images may succesfully open and be readable.
-    File::open(path)?.read_to_end(&mut buf)?;
-
+pub fn matching_images(client: &Client, buf: &[u8], key: &str) -> Result<Vec<Image>, Error> {
     // Assemble URL with API key.
     let endpoint = format!("{}?key={}", ENDPOINT, key);
 
@@ -77,13 +70,12 @@ pub fn matching_images(client: &Client, path: &Path, key: &str) -> Result<Vec<Im
             image: Content {
                 content: base64::encode(&buf),
             },
-            features: vec![Type {
+            features: vec![FeatureType {
                 feature_type: "WEB_DETECTION",
+                max_results: 1000,
             }],
         }],
     });
-
-    debug!("Querying {} with Vision API.", path.display());
 
     // Assemble request and send it.
     let mut req = client

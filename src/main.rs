@@ -51,7 +51,6 @@ pub struct Opt {
 }
 
 fn main() {
-    // FATAL: The program can't run without the logger.
     CombinedLogger::init(vec![
         TermLogger::new(LevelFilter::Info, Config::default()).unwrap(),
     ]).unwrap();
@@ -59,7 +58,6 @@ fn main() {
     let opts = Opt::from_args();
 
     // Get the current working directory.
-    // FATAL: This can fail if the directory does not exist, or is invalid.
     let mut cur = env::current_dir().expect("Unable to access the current working directory.");
     cur.push(&opts.dir);
 
@@ -75,6 +73,7 @@ fn main() {
         // For some reason we can't iterate in parallel over directories, so we do some filtering and then collect into a Vec.
         .collect::<Vec<_>>()
         // Iterate over the collection again, but in parallel.
+        // TODO: Make this run async instead of parallel.
         .par_iter()
         .for_each(|path| {
             debug!("Starting processing of {}.", path.display());
@@ -82,7 +81,7 @@ fn main() {
             // TODO: Better output.
             match process::process_file(&client, &path, &opts) {
                 Ok(_) => info!("Processed {}.", path.file_name().and_then(|n| n.to_str()).unwrap_or("file")),
-                Err(e) => error!("Failed to process. ({})", e),
+                Err(e) => info!("{:?}", e),
             }
         });
 }
