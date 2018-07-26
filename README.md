@@ -1,4 +1,7 @@
-# Finch
+# Development Halted
+Unfortunately, I have discovered some odd behaviour and instabilities in Google's Vision API which prevents Finch from doing the best job it can. They have been reported, but I have yet to hear anything about them being fixed. I don't recommend using Finch in its current state. It's still user-unfriendly and could have unexpected behavior. I will resume development on Finch once Google's API is stable.
+
+# Finch 
 
 #### What is it?
 Are you an image hoarder? Couldn't resist saving that Zuckerberg meme, or cat chasing a laser beam? It's unlikely those images were in their original, high resolution glory.
